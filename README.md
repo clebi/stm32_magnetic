@@ -1,3 +1,6 @@
-# stm32_leds
+# STM32 Magnetic
 
-An rust implementation of LED blinking on a stm32f3discovery. It uses the RTFM framework and the f3 crate for board support.
+The purpose of the project is to enable a LED to indicate the north.
+
+Read the magnetic sensor ([LM303DLHC](http://www.st.com/en/mems-and-sensors/lsm303dlhc.html)) of the [STM32F3DISCOVERY](http://www.st.com/en/evaluation-tools/stm32f3discovery.html) through i2c. Implemented using Rust and the [RTFM](https://github.com/japaric/cortex-m-rtfm)
+framework.
