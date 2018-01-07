@@ -29,12 +29,11 @@ pub enum I2CAddrMode {
 /// # Arguments
 ///
 /// * `device` The register block of the i2c device
-pub struct I2C<'a> {
-    pub device: &'a RegisterBlock,
+pub struct I2C {
+    pub device: &'static RegisterBlock,
 }
 
-impl<'a> I2C<'a> {
-
+impl I2C {
     /// Disable i2c device
     pub fn disable(&self) {
         self.device.cr1.modify(|_, w| w.pe().clear_bit());
@@ -78,7 +77,9 @@ impl<'a> I2C<'a> {
     /// Write a byte to a slave
     pub fn write(&self, byte: &u8) {
         unsafe {
-            self.device.cr2.modify(|_, w| w.rd_wrn().clear_bit().nbytes().bits(1));
+            self.device
+                .cr2
+                .modify(|_, w| w.rd_wrn().clear_bit().nbytes().bits(1));
             self.device.txdr.modify(|_, w| w.bits(*byte as u32));
             self.device.cr2.modify(|_, w| w.start().set_bit());
         }
@@ -86,7 +87,9 @@ impl<'a> I2C<'a> {
 
     /// Request read to a slave
     pub fn request_read(&self) {
-        self.device.cr2.modify(|_, w| w.rd_wrn().set_bit().start().set_bit());
+        self.device
+            .cr2
+            .modify(|_, w| w.rd_wrn().set_bit().start().set_bit());
     }
 
     /// Read the rx buffer

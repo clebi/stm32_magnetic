@@ -26,6 +26,7 @@ use core::fmt::Write;
 use rtfm::{app, Threshold};
 use semihosting::hio;
 use devices::{I2C, I2CAddrMode};
+use f3::stm32f30x::I2C1;
 
 const GPIO_FREQ_HIGH: u8 = 0x3;
 const GPIO_PULLUP: u8 = 0x1;
@@ -40,10 +41,14 @@ const MAGNETIC_REG_CRA_REG_M: u8 = 0x0;
 app! {
     device: f3::stm32f30x,
 
+    resources: {
+        static I2C_1: I2C;
+    },
+
     tasks: {
         I2C1_EV_EXTI23: {
             path: i2c_event,
-            resources: [I2C1],
+            resources: [I2C_1, I2C1],
         },
         I2C1_ER: {
             path: i2c_error,
@@ -52,7 +57,7 @@ app! {
     },
 }
 
-fn init(p: init::Peripherals) {
+fn init(p: init::Peripherals) -> init::LateResourceValues {
     // Configure gpiob : PB6 & PB7
     p.RCC.ahbenr.modify(|_, w| w.iopben().enabled());
     p.GPIOB
@@ -83,10 +88,17 @@ fn init(p: init::Peripherals) {
     p.RCC.cfgr3.modify(|_, w| w.i2c1sw().clear_bit());
     p.RCC.apb1enr.modify(|_, w| w.i2c1en().enabled());
 
-    let i2c_1 = I2C { device: p.I2C1 };
+    let late_resources: init::LateResourceValues;
+    unsafe {
+        late_resources = init::LateResourceValues {
+            I2C_1: I2C {
+                device: &*I2C1.get(),
+            },
+        };
+    }
 
     // Disable i2c1 peripheral
-    i2c_1.disable();
+    late_resources.I2C_1.disable();
 
     // Configure i2c1
     unsafe {
@@ -125,11 +137,13 @@ fn init(p: init::Peripherals) {
     }
 
     // Enable i2c1 peripheral and set 7 bit adress mode
-    i2c_1.enable();
-    i2c_1.set_addr_type(I2CAddrMode::Bits7);
+    late_resources.I2C_1.enable();
+    late_resources.I2C_1.set_addr_type(I2CAddrMode::Bits7);
     // write to slave
-    i2c_1.begin(ADDR_MAGNETIC_SENSOR as u16);
-    i2c_1.write(&MAGNETIC_REG_CRA_REG_M);
+    late_resources.I2C_1.begin(ADDR_MAGNETIC_SENSOR as u16);
+    late_resources.I2C_1.write(&MAGNETIC_REG_CRA_REG_M);
+
+    late_resources
 }
 
 fn idle() -> ! {
@@ -139,24 +153,23 @@ fn idle() -> ! {
 }
 
 fn i2c_event(_t: &mut Threshold, r: I2C1_EV_EXTI23::Resources) {
-    let i2c_1 = I2C { device: r.I2C1 };
-    if i2c_1.rx_buffer_full() {
+    if (**r.I2C_1).rx_buffer_full() {
         // read rx buffer and stop
         writeln!(hio::hstdout().unwrap(), "i2c_event->recv").unwrap();
         writeln!(
             hio::hstdout().unwrap(),
             "i2c_event->i2c1::rxdr = {:x}",
-            i2c_1.rx_read()
+            (**r.I2C_1).rx_read()
         ).unwrap();
-        i2c_1.end();
-    } else if i2c_1.stopped() {
+        (**r.I2C_1).end();
+    } else if (**r.I2C_1).stopped() {
         // stop
         writeln!(hio::hstdout().unwrap(), "i2c_event->stop").unwrap();
-        i2c_1.clear_stop();
-    } else if i2c_1.transfer_completed() {
+        (**r.I2C_1).clear_stop();
+    } else if (**r.I2C_1).transfer_completed() {
         // read on slave
         writeln!(hio::hstdout().unwrap(), "i2c_event->read_on_slave").unwrap();
-        i2c_1.request_read();
+        (**r.I2C_1).request_read();
     }
     writeln!(
         hio::hstdout().unwrap(),
