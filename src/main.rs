@@ -25,7 +25,7 @@ mod devices;
 use core::fmt::Write;
 use rtfm::{app, Threshold};
 use semihosting::hio;
-use devices::{I2C, I2CAddrMode};
+use devices::{I2C, I2CAddrMode, I2CCallbacks};
 use f3::stm32f30x::I2C1;
 
 const GPIO_FREQ_HIGH: u8 = 0x3;
@@ -37,6 +37,31 @@ const MAGNETIC_REG_CRA_REG_M: u8 = 0x0;
 //const MAGNETIC_REG_OUT_X_H_M: u32 = 0x03;
 //const MAGNETIC_REG_IRA_M: u32 = 0x03;
 //const TEMP_REG_OUT_H_M: u32 = 0x31;
+
+struct I2CMagRead {}
+
+/// Implementation of I2CCallbacks to read a value on the magnetic sensor
+impl I2CCallbacks for I2CMagRead {
+    fn stop(&self, _dev: &I2C) {
+        writeln!(hio::hstdout().unwrap(), "i2c_event->stop").unwrap();
+    }
+
+    fn transfer_completed(&self, dev: &I2C) {
+        writeln!(hio::hstdout().unwrap(), "i2c_event->read_on_slave").unwrap();
+        dev.request_read();
+    }
+
+    fn receive(&self, dev: &I2C, data: u8) {
+        // read rx buffer and stop
+        writeln!(hio::hstdout().unwrap(), "i2c_event->recv").unwrap();
+        writeln!(
+            hio::hstdout().unwrap(),
+            "i2c_event->i2c1::rxdr = {:x}",
+            data
+        ).unwrap();
+        dev.end();
+    }
+}
 
 app! {
     device: f3::stm32f30x,
@@ -93,6 +118,7 @@ fn init(p: init::Peripherals) -> init::LateResourceValues {
         late_resources = init::LateResourceValues {
             I2C_1: I2C {
                 device: &*I2C1.get(),
+                callbacks: &I2CMagRead {},
             },
         };
     }
@@ -153,24 +179,7 @@ fn idle() -> ! {
 }
 
 fn i2c_event(_t: &mut Threshold, r: I2C1_EV_EXTI23::Resources) {
-    if (**r.I2C_1).rx_buffer_full() {
-        // read rx buffer and stop
-        writeln!(hio::hstdout().unwrap(), "i2c_event->recv").unwrap();
-        writeln!(
-            hio::hstdout().unwrap(),
-            "i2c_event->i2c1::rxdr = {:x}",
-            (**r.I2C_1).rx_read()
-        ).unwrap();
-        (**r.I2C_1).end();
-    } else if (**r.I2C_1).stopped() {
-        // stop
-        writeln!(hio::hstdout().unwrap(), "i2c_event->stop").unwrap();
-        (**r.I2C_1).clear_stop();
-    } else if (**r.I2C_1).transfer_completed() {
-        // read on slave
-        writeln!(hio::hstdout().unwrap(), "i2c_event->read_on_slave").unwrap();
-        (**r.I2C_1).request_read();
-    }
+    (**r.I2C_1).event_int(); //Call the i2c event manager
     writeln!(
         hio::hstdout().unwrap(),
         "i2c_event->i2c1::isr = {:x}",

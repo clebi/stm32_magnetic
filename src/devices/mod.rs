@@ -16,6 +16,31 @@
 
 use f3::stm32f30x::i2c1::RegisterBlock;
 
+/// I2C callbacks. It contains the I2C events needed to interact with other devices.
+pub trait I2CCallbacks {
+    /// Called when a stop event is received.
+    ///
+    /// # Arguments
+    ///
+    /// * `device` the i2c device
+    fn stop(&self, device: &I2C);
+
+    /// Called when a transfer completed event is received.
+    ///
+    /// # Arguments
+    ///
+    /// * `device` the i2c device
+    fn transfer_completed(&self, device: &I2C);
+
+    /// Called when a rx buffer full event is received.
+    ///
+    /// # Arguments
+    ///
+    /// * `device` the i2c device
+    /// * `data` the data received from the read
+    fn receive(&self, device: &I2C, data: u8);
+}
+
 /// The I2C address mode
 pub enum I2CAddrMode {
     /// 10 bits adress mode
@@ -29,8 +54,10 @@ pub enum I2CAddrMode {
 /// # Arguments
 ///
 /// * `device` The register block of the i2c device
+/// * `callbacks` An instance of I2C callbacks to manage i2c events
 pub struct I2C {
     pub device: &'static RegisterBlock,
+    pub callbacks: &'static I2CCallbacks,
 }
 
 impl I2C {
@@ -90,6 +117,18 @@ impl I2C {
         self.device
             .cr2
             .modify(|_, w| w.rd_wrn().set_bit().start().set_bit());
+    }
+
+    /// This function receive the i2c event interrupt and dispatch it to the corresponding callback.
+    pub fn event_int(&self) {
+        if self.stopped() {
+            self.clear_stop();
+            self.callbacks.stop(self);
+        } else if self.transfer_completed() {
+            self.callbacks.transfer_completed(self);
+        } else if self.rx_buffer_full() {
+            self.callbacks.receive(self, self.rx_read());
+        }
     }
 
     /// Read the rx buffer
