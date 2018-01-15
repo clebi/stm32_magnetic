@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["clement"]
 
 [dependencies]
-cortex-m = "0.3.0"
+cortex-m = "0.4.0"
 cortex-m-rtfm = "0.2.0"
 f3 = { git = "https://github.com/japaric/f3" }
 
