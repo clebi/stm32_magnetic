@@ -61,6 +61,58 @@ pub struct I2C {
 }
 
 impl I2C {
+    /// Create and initialize the i2c device
+    ///
+    /// # Arguments
+    ///
+    /// * `device` - The i2c rgister block
+    /// * `callbacks` - An i2c callbacks instance
+    pub fn new(device: &'static RegisterBlock, callbacks: &'static I2CCallbacks) -> I2C {
+        let i2c = I2C {
+            device: device,
+            callbacks: callbacks,
+        };
+
+        i2c.disable();
+        unsafe {
+            device.cr1.modify(|_, w| {
+                w.anfoff()
+                    .clear_bit()
+                    .dnf()
+                    .bits(0)
+                    .nostretch()
+                    .clear_bit()
+                    .errie()
+                    .set_bit()
+                    .tcie()
+                    .set_bit()
+                    .stopie()
+                    .set_bit()
+                    .nackie()
+                    .set_bit()
+                    .rxie()
+                    .set_bit()
+                    .txie()
+                    .set_bit()
+            });
+            device.timingr.modify(|_, w| {
+                w.presc()
+                    .bits(1)
+                    .scll()
+                    .bits(0x13)
+                    .sclh()
+                    .bits(0xF)
+                    .sdadel()
+                    .bits(0x2)
+                    .scldel()
+                    .bits(0x4)
+            });
+        }
+        i2c.enable();
+
+        i2c
+    }
+
     /// Disable i2c device
     pub fn disable(&self) {
         self.device.cr1.modify(|_, w| w.pe().clear_bit());
@@ -121,13 +173,13 @@ impl I2C {
 
     /// This function receive the i2c event interrupt and dispatch it to the corresponding callback.
     pub fn event_int(&self) {
-        if self.stopped() {
+        if self.rx_buffer_full() {
+            self.callbacks.receive(self, self.rx_read());
+        } else if self.stopped() {
             self.clear_stop();
             self.callbacks.stop(self);
         } else if self.transfer_completed() {
             self.callbacks.transfer_completed(self);
-        } else if self.rx_buffer_full() {
-            self.callbacks.receive(self, self.rx_read());
         }
     }
 

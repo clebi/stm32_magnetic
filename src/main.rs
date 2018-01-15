@@ -116,56 +116,15 @@ fn init(p: init::Peripherals) -> init::LateResourceValues {
     let late_resources: init::LateResourceValues;
     unsafe {
         late_resources = init::LateResourceValues {
-            I2C_1: I2C {
-                device: &*I2C1.get(),
-                callbacks: &I2CMagRead {},
-            },
+            I2C_1: I2C::new(&*I2C1.get(), &I2CMagRead {}),
         };
     }
 
-    // Disable i2c1 peripheral
-    late_resources.I2C_1.disable();
+    writeln!(hio::hstdout().unwrap(), "i2c_event->init done").unwrap();
 
-    // Configure i2c1
-    unsafe {
-        p.I2C1.cr1.modify(|_, w| {
-            w.anfoff()
-                .clear_bit()
-                .dnf()
-                .bits(0)
-                .nostretch()
-                .clear_bit()
-                .errie()
-                .set_bit()
-                .tcie()
-                .set_bit()
-                .stopie()
-                .set_bit()
-                .nackie()
-                .set_bit()
-                .rxie()
-                .set_bit()
-                .txie()
-                .set_bit()
-        });
-        p.I2C1.timingr.modify(|_, w| {
-            w.presc()
-                .bits(1)
-                .scll()
-                .bits(0x13)
-                .sclh()
-                .bits(0xF)
-                .sdadel()
-                .bits(0x2)
-                .scldel()
-                .bits(0x4)
-        });
-    }
-
-    // Enable i2c1 peripheral and set 7 bit adress mode
-    late_resources.I2C_1.enable();
     late_resources.I2C_1.set_addr_type(I2CAddrMode::Bits7);
     // write to slave
+    writeln!(hio::hstdout().unwrap(), "i2c_event->begin").unwrap();
     late_resources.I2C_1.begin(ADDR_MAGNETIC_SENSOR as u16);
     late_resources.I2C_1.write(&MAGNETIC_REG_CRA_REG_M);
 
