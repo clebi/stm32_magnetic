@@ -14,10 +14,10 @@
 
 //! The `devices` module contains all functionnality to access devices
 
-use f3::stm32f30x::i2c1::RegisterBlock;
+use f3::hal::stm32f30x::I2C1;
 
 /// I2C callbacks. It contains the I2C events needed to interact with other devices.
-pub trait I2CCallbacks {
+pub trait I2CCallbacks : Sync {
     /// Called when a stop event is received.
     ///
     /// # Arguments
@@ -56,7 +56,7 @@ pub enum I2CAddrMode {
 /// * `device` The register block of the i2c device
 /// * `callbacks` An instance of I2C callbacks to manage i2c events
 pub struct I2C {
-    pub device: &'static RegisterBlock,
+    pub device: I2C1,
     pub callbacks: &'static I2CCallbacks,
 }
 
@@ -67,13 +67,8 @@ impl I2C {
     ///
     /// * `device` - The i2c rgister block
     /// * `callbacks` - An i2c callbacks instance
-    pub fn new(device: &'static RegisterBlock, callbacks: &'static I2CCallbacks) -> I2C {
-        let i2c = I2C {
-            device: device,
-            callbacks: callbacks,
-        };
-
-        i2c.disable();
+    pub fn new(device: I2C1, callbacks: &'static I2CCallbacks) -> I2C {
+        device.cr1.modify(|_, w| w.pe().clear_bit());
         unsafe {
             device.cr1.modify(|_, w| {
                 w.anfoff()
@@ -108,6 +103,11 @@ impl I2C {
                     .bits(0x4)
             });
         }
+
+        let i2c = I2C {
+            device: device,
+            callbacks: callbacks,
+        };
         i2c.enable();
 
         i2c
@@ -141,11 +141,9 @@ impl I2C {
     ///
     /// * `addr` the address of the salve
     pub fn begin(&self, addr: u16) {
-        unsafe {
-            self.device
-                .cr2
-                .modify(|_, w| w.sadd1().bits(addr as u8).autoend().clear_bit());
-        }
+        self.device
+            .cr2
+            .modify(|_, w| w.sadd1().bits(addr as u8).autoend().clear_bit());
     }
 
     /// Ends transmission
@@ -206,5 +204,10 @@ impl I2C {
     /// clear the sopped flag
     pub fn clear_stop(&self) {
         self.device.icr.write(|w| w.stopcf().set_bit());
+    }
+
+    /// Read the ISR register
+    pub fn isr_read(&self) -> u32 {
+        return self.device.isr.read().bits();
     }
 }

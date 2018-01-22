@@ -26,7 +26,7 @@ use core::fmt::Write;
 use rtfm::{app, Threshold};
 use semihosting::hio;
 use devices::{I2C, I2CAddrMode, I2CCallbacks};
-use f3::stm32f30x::I2C1;
+use f3::hal::stm32f30x;
 
 const GPIO_FREQ_HIGH: u8 = 0x3;
 const GPIO_PULLUP: u8 = 0x1;
@@ -64,7 +64,7 @@ impl I2CCallbacks for I2CMagRead {
 }
 
 app! {
-    device: f3::stm32f30x,
+    device: stm32f30x,
 
     resources: {
         static I2C_1: I2C;
@@ -73,52 +73,49 @@ app! {
     tasks: {
         I2C1_EV_EXTI23: {
             path: i2c_event,
-            resources: [I2C_1, I2C1],
+            resources: [I2C_1],
         },
         I2C1_ER: {
             path: i2c_error,
-            resources: [I2C1],
+            resources: [I2C_1],
         }
     },
 }
 
-fn init(p: init::Peripherals) -> init::LateResourceValues {
+fn init(p: init::Peripherals) -> init::LateResources {
     // Configure gpiob : PB6 & PB7
-    p.RCC.ahbenr.modify(|_, w| w.iopben().enabled());
-    p.GPIOB
+    p.device.RCC.ahbenr.modify(|_, w| w.iopben().enabled());
+    p.device.GPIOB
         .moder
         .modify(|_, w| w.moder6().alternate().moder7().alternate());
-    p.GPIOB
+    p.device.GPIOB
         .otyper
         .modify(|_, w| w.ot6().set_bit().ot7().set_bit());
     unsafe {
-        p.GPIOB.ospeedr.modify(|_, w| {
+        p.device.GPIOB.ospeedr.modify(|_, w| {
             w.ospeedr6()
                 .bits(GPIO_FREQ_HIGH)
                 .ospeedr7()
                 .bits(GPIO_FREQ_HIGH)
         });
-        p.GPIOB
+        p.device.GPIOB
             .pupdr
             .modify(|_, w| w.pupdr6().bits(GPIO_PULLUP).pupdr7().bits(GPIO_PULLUP));
-        p.GPIOB
+        p.device.GPIOB
             .afrl
             .modify(|_, w| w.afrl6().bits(GPIO_AF_4).afrl7().bits(GPIO_AF_4));
     }
 
     // Reset i2c1
-    p.RCC.apb1rstr.modify(|_, w| w.i2c1rst().set_bit());
-    p.RCC.apb1rstr.modify(|_, w| w.i2c1rst().clear_bit());
+    p.device.RCC.apb1rstr.modify(|_, w| w.i2c1rst().set_bit());
+    p.device.RCC.apb1rstr.modify(|_, w| w.i2c1rst().clear_bit());
     // Enable i2c1 clock
-    p.RCC.cfgr3.modify(|_, w| w.i2c1sw().clear_bit());
-    p.RCC.apb1enr.modify(|_, w| w.i2c1en().enabled());
+    p.device.RCC.cfgr3.modify(|_, w| w.i2c1sw().clear_bit());
+    p.device.RCC.apb1enr.modify(|_, w| w.i2c1en().enabled());
 
-    let late_resources: init::LateResourceValues;
-    unsafe {
-        late_resources = init::LateResourceValues {
-            I2C_1: I2C::new(&*I2C1.get(), &I2CMagRead {}),
-        };
-    }
+    let late_resources = init::LateResources {
+        I2C_1: I2C::new(p.device.I2C1, &I2CMagRead {}),
+    };
 
     writeln!(hio::hstdout().unwrap(), "i2c_event->init done").unwrap();
 
@@ -138,18 +135,18 @@ fn idle() -> ! {
 }
 
 fn i2c_event(_t: &mut Threshold, r: I2C1_EV_EXTI23::Resources) {
-    (**r.I2C_1).event_int(); //Call the i2c event manager
+    (*r.I2C_1).event_int(); //Call the i2c event manager
     writeln!(
         hio::hstdout().unwrap(),
         "i2c_event->i2c1::isr = {:x}",
-        r.I2C1.isr.read().bits()
+        (*r.I2C_1).isr_read()
     ).unwrap();
 }
 
 fn i2c_error(_t: &mut Threshold, r: I2C1_ER::Resources) {
     writeln!(
         hio::hstdout().unwrap(),
-        "i2c_error->i2c1::isr = {:x}",
-        r.I2C1.isr.read().bits()
+        "i2c_event->i2c1::isr = {:x}",
+        (*r.I2C_1).isr_read()
     ).unwrap();
 }

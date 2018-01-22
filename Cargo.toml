@@ -5,12 +5,16 @@ authors = ["clement"]
 
 [dependencies]
 cortex-m = "0.4.0"
-cortex-m-rtfm = "0.2.0"
-f3 = { git = "https://github.com/japaric/f3" }
+cortex-m-rtfm = "0.3.1"
+f3 = "0.5.1"
 
 [dependencies.cortex-m-rt]
 features = ["abort-on-panic"]
-version = "0.3.0"
+version = "0.3.12"
+
+[dependencies.stm32f30x]
+version = "0.6.0"
+features = ["rt"]
 
 [dependencies.cortex-m-semihosting]
 version = "0.2.0"
@@ -21,3 +25,4 @@ lto = true
 
 [profile.dev]
 codegen-units = 1
+incremental = false
